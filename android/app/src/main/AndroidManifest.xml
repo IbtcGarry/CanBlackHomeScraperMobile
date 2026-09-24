@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for every network call this app makes: Canvas, Blackboard,
+         and Gradescope are all reached over the network, so without this
+         permission every fetch fails with a host lookup error, even though
+         the device itself has working internet access. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="canblackhomescraper_mobile"
         android:name="${applicationName}"
