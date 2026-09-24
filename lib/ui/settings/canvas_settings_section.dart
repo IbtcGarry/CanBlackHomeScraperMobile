@@ -25,6 +25,7 @@ class _CanvasSettingsSectionState extends State<CanvasSettingsSection> {
   late final TextEditingController _baseUrlController;
   late final TextEditingController _tokenController;
   late final TextEditingController _icalUrlController;
+  late bool _useSso;
 
   @override
   void initState() {
@@ -38,6 +39,7 @@ class _CanvasSettingsSectionState extends State<CanvasSettingsSection> {
     _icalUrlController = TextEditingController(
       text: widget.initialConfig.icalUrl ?? '',
     );
+    _useSso = widget.initialConfig.useSso;
   }
 
   @override
@@ -54,6 +56,7 @@ class _CanvasSettingsSectionState extends State<CanvasSettingsSection> {
         baseUrl: _emptyToNull(_baseUrlController.text),
         token: _emptyToNull(_tokenController.text),
         icalUrl: _emptyToNull(_icalUrlController.text),
+        useSso: _useSso,
       ),
     );
   }
@@ -96,6 +99,18 @@ class _CanvasSettingsSectionState extends State<CanvasSettingsSection> {
                 border: OutlineInputBorder(),
               ),
               obscureText: true,
+            ),
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _useSso,
+              onChanged: (value) => setState(() => _useSso = value ?? false),
+              title: const Text('Use single sign on instead of a token'),
+              subtitle: const Text(
+                'No token needed, but the first fetch opens a one time '
+                'sign in screen.',
+              ),
             ),
             const SizedBox(height: 16),
             const Text(

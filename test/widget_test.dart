@@ -29,8 +29,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Canvas'), findsOneWidget);
-    expect(find.text('Fetch now with saved settings'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(3));
+    // skipOffstage is false here since the settings form is taller than
+    // the test viewport; content further down the scrollable list is
+    // still present in the tree, just outside the currently laid out
+    // area, and this asks the finder to look there too.
+    expect(find.text('Canvas', skipOffstage: false), findsOneWidget);
+    expect(
+      find.text('Fetch now with saved settings', skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField, skipOffstage: false), findsNWidgets(3));
   });
 }

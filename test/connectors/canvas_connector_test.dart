@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:canblackhomescraper_mobile/connectors/canvas_connector.dart';
+import 'package:canblackhomescraper_mobile/connectors/connector.dart';
 import 'package:canblackhomescraper_mobile/models/assignment_kind.dart';
 import 'package:canblackhomescraper_mobile/models/source.dart';
 import 'package:canblackhomescraper_mobile/models/source_config.dart';
@@ -241,6 +242,180 @@ void main() {
       // called when a token is available.
       verifyNever(
         () => client.get<String>(any(), options: any(named: 'options')),
+      );
+    });
+  });
+
+  group('CanvasConnector, single sign on session strategy', () {
+    test('throws SsoSessionRequiredException when no session cookie was supplied', () {
+      final connector = CanvasConnector(
+        config: const CanvasConfig(
+          baseUrl: 'https://canvas.example.edu',
+          useSso: true,
+        ),
+        client: MockDio(),
+      );
+
+      expect(
+        connector.fetchAssignments(),
+        throwsA(isA<SsoSessionRequiredException>()),
+      );
+    });
+
+    test('fetches with the session cookie when one was supplied', () async {
+      final client = MockDio();
+      when(
+        () => client.get<List<dynamic>>(any(), options: any(named: 'options')),
+      ).thenAnswer((invocation) async {
+        final url = invocation.positionalArguments.first as String;
+        if (url.contains('/api/v1/courses/1/assignments')) {
+          return Response(
+            data: [
+              {
+                'id': 5,
+                'name': 'Homework 1',
+                'due_at': '2026-09-30T04:59:00Z',
+                'html_url': null,
+                'points_possible': null,
+                'submission': null,
+              },
+            ],
+            requestOptions: RequestOptions(path: url),
+            statusCode: 200,
+          );
+        }
+        return Response(
+          data: [
+            {'id': 1, 'name': 'Math 218'},
+          ],
+          requestOptions: RequestOptions(path: url),
+          statusCode: 200,
+        );
+      });
+
+      final connector = CanvasConnector(
+        config: const CanvasConfig(
+          baseUrl: 'https://canvas.example.edu',
+          useSso: true,
+        ),
+        client: client,
+        ssoCookieHeader: 'JSESSIONID=abc123',
+      );
+
+      final assignments = await connector.fetchAssignments();
+
+      expect(assignments, hasLength(1));
+      expect(assignments.single.course, 'Math 218');
+
+      final captured = verify(
+        () => client.get<List<dynamic>>(
+          any(),
+          options: captureAny(named: 'options'),
+        ),
+      ).captured;
+      final firstOptions = captured.first as Options;
+      expect(firstOptions.headers?['Cookie'], 'JSESSIONID=abc123');
+      expect(firstOptions.headers?['X-Requested-With'], 'XMLHttpRequest');
+    });
+
+    test('a failing request with a session cookie is reported as needing a fresh login', () async {
+      final client = MockDio();
+      when(
+        () => client.get<List<dynamic>>(any(), options: any(named: 'options')),
+      ).thenAnswer(
+        (_) async => Response(
+          data: null,
+          requestOptions: RequestOptions(path: 'courses'),
+          statusCode: 401,
+        ),
+      );
+
+      final connector = CanvasConnector(
+        config: const CanvasConfig(
+          baseUrl: 'https://canvas.example.edu',
+          useSso: true,
+        ),
+        client: client,
+        ssoCookieHeader: 'an expired session cookie',
+      );
+
+      expect(
+        connector.fetchAssignments(),
+        throwsA(isA<SsoSessionRequiredException>()),
+      );
+    });
+
+    test('the token strategy is preferred over single sign on when both are configured', () async {
+      final client = MockDio();
+      when(
+        () => client.get<List<dynamic>>(any(), options: any(named: 'options')),
+      ).thenAnswer(
+        (_) async => Response(
+          data: <dynamic>[],
+          requestOptions: RequestOptions(path: 'courses'),
+          statusCode: 200,
+        ),
+      );
+
+      final connector = CanvasConnector(
+        config: const CanvasConfig(
+          baseUrl: 'https://canvas.example.edu',
+          token: 'a real token',
+          useSso: true,
+        ),
+        client: client,
+        ssoCookieHeader: 'a session cookie',
+      );
+
+      await connector.fetchAssignments();
+
+      final captured = verify(
+        () => client.get<List<dynamic>>(
+          any(),
+          options: captureAny(named: 'options'),
+        ),
+      ).captured;
+      final firstOptions = captured.first as Options;
+      expect(firstOptions.headers?['Authorization'], 'Bearer a real token');
+      expect(firstOptions.headers?.containsKey('Cookie'), isFalse);
+    });
+  });
+
+  group('canvasSsoEntryUrl and canvasIsSignedIn', () {
+    test('the entry url is the general login redirector, not a local login page', () {
+      expect(
+        canvasSsoEntryUrl('https://canvas.example.edu').toString(),
+        'https://canvas.example.edu/login',
+      );
+    });
+
+    test('recognizes a signed in url on the right origin off any login path', () {
+      expect(
+        canvasIsSignedIn(
+          Uri.parse('https://canvas.example.edu/courses/1'),
+          'https://canvas.example.edu',
+        ),
+        isTrue,
+      );
+    });
+
+    test('does not treat a login page on the right origin as signed in', () {
+      expect(
+        canvasIsSignedIn(
+          Uri.parse('https://canvas.example.edu/login/saml'),
+          'https://canvas.example.edu',
+        ),
+        isFalse,
+      );
+    });
+
+    test('does not treat a page on a different origin as signed in', () {
+      expect(
+        canvasIsSignedIn(
+          Uri.parse('https://idp.example.edu/courses/1'),
+          'https://canvas.example.edu',
+        ),
+        isFalse,
       );
     });
   });

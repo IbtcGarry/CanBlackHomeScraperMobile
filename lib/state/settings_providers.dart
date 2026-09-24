@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/app_settings.dart';
 import '../models/source_config.dart';
+import '../session/shared_session_manager.dart';
 import '../storage/preferences_store.dart';
 import '../storage/secure_credential_store.dart';
 
@@ -16,6 +17,14 @@ final preferencesStoreProvider = Provider<PreferencesStore>(
 /// a real device's encrypted storage.
 final credentialStoreProvider = Provider<CredentialStore>(
   (ref) => SecureCredentialStore(),
+);
+
+/// The single SharedSessionManager instance the app uses to load and
+/// save single sign on sessions, built on top of whichever
+/// CredentialStore is in scope so a test can reach the same in memory
+/// sessions a SsoWebviewLoginScreen would save on a real device.
+final sharedSessionManagerProvider = Provider<SharedSessionManager>(
+  (ref) => SharedSessionManager(ref.read(credentialStoreProvider)),
 );
 
 /// Holds the general, cross source settings (timezone, lookahead days),
